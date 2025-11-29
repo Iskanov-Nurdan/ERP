@@ -1,26 +1,39 @@
-from tabnanny import verbose
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 
-class User(AbstractUser):
-    class Roles(models.TextChoices):
-        ADMIN = "admin", "Администратор"
-        WAREHOUSE_MANAGER = "warehouse_manager", "Кладовщик сырья"
-        PRODUCTION_WORKER = "production_worker", "Работник производства"
-        PRODUCTION_OPERATOR = "production_operator", "Оператор производства"
-        QUALITY_CONTROL = "quality_control", "Специалист по качеству"
-        SALES_MANAGER = "sales_manager", "Менеджер по продажам"
-        LOGISTICS_MANAGER = "logistics_manager", "Менеджер по логистике"
+class Role(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    description = models.CharField(max_length=255, blank=True)
 
-    role = models.CharField(
-        max_length=50,
-        choices=Roles.choices,
-        default=Roles.PRODUCTION_WORKER
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Роль"
+        verbose_name_plural = "Роли"
+
+
+class User(AbstractUser):
+    class SystemRoles(models.TextChoices):
+        OWNER = "owner", "Владелец"
+        ADMIN = "admin", "Администратор"
+
+    system_role = models.CharField(
+        max_length=20,
+        choices=SystemRoles.choices,
+        default=SystemRoles.ADMIN
+    )
+
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="users"
     )
 
     def __str__(self):
-        return f"{self.username} ({self.role})"
+        return f"{self.username} ({self.system_role})"
 
     class Meta:
         verbose_name = "Пользователь"
