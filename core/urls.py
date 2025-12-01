@@ -33,6 +33,8 @@ schema_view = get_schema_view(
 
 
 urlpatterns = [
+
+    path('', schema_view.with_ui('swagger', cache_timeout=0), name='swagger-root'),
     path('admin/', admin.site.urls),
     path("api/auth/login/", TokenObtainPairView.as_view(), name="jwt_login"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="jwt_refresh"),
@@ -44,3 +46,4 @@ urlpatterns = [
 ]
 
 
+ 
