@@ -8,12 +8,12 @@ from .views import (
     RoleListView,
     UserDetailView,
     UserDeleteView,
-    MeView
+    MeView,
+    LoginView,
 )
 
 urlpatterns = [
 
-    path("login/", TokenObtainPairView.as_view(), name="login"),
     path("refresh/", TokenRefreshView.as_view(), name="token-refresh"),
 
     path("users/", UsersListView.as_view(), name="users-list"),
@@ -25,4 +25,7 @@ urlpatterns = [
     path("roles/create/", RoleCreateView.as_view(), name="roles-create"),
 
     path("me/", MeView.as_view(), name="user-me"),
+
+    path("login/", LoginView.as_view(), name="login"),
+
 ]

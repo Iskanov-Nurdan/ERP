@@ -15,14 +15,17 @@ class Role(models.Model):
 
 
 class User(AbstractUser):
+    email = models.EmailField(unique=True)
+
     class SystemRoles(models.TextChoices):
         OWNER = "owner", "Владелец"
         ADMIN = "admin", "Администратор"
+        USER = "user", "Пользователь"
+
 
     system_role = models.CharField(
         max_length=20,
         choices=SystemRoles.choices,
-        default=SystemRoles.ADMIN
     )
 
     role = models.ForeignKey(
@@ -32,8 +35,11 @@ class User(AbstractUser):
         related_name="users"
     )
 
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["username", "system_role"]  
+
     def __str__(self):
-        return f"{self.username} ({self.system_role})"
+        return f"{self.email} ({self.system_role})"
 
     class Meta:
         verbose_name = "Пользователь"
