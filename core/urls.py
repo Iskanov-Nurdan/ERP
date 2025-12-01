@@ -39,6 +39,7 @@ urlpatterns = [
     path("api/auth/login/", TokenObtainPairView.as_view(), name="jwt_login"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="jwt_refresh"),
     path("api/auth/", include("apps.accounts.urls")),
+    path("api/sclad/", include("apps.sclad.urls")),
 
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='swagger'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='redoc'),
