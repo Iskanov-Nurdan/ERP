@@ -44,12 +44,14 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.sclad',
     'apps.production',
+    'apps.sales',
 
 
 
     #rest_framework
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework.authtoken',
     'drf_yasg',
 ]    
 
