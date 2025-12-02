@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     #apps
     'apps.accounts',
     'apps.sclad',
+    'apps.production',
 
 
 
