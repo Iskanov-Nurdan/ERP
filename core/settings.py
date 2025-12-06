@@ -45,6 +45,11 @@ INSTALLED_APPS = [
     'apps.sclad',
     'apps.production',
     'apps.sales',
+    "apps.logistics",
+    "apps.quality",
+    "apps.production_control",
+    "apps.reports",
+    "apps.dashboard",
 
 
 
@@ -53,6 +58,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework.authtoken',
     'drf_yasg',
+    
 ]    
 
 
