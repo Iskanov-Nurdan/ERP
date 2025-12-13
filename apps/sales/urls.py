@@ -10,3 +10,5 @@ urlpatterns = [
     path("orders/<int:pk>/", CustomerOrderDetailView.as_view(),name="customer-order-detail",),
     path("orders/summary/active/",CustomerOrderActiveSummaryView.as_view(),name="customer-order-active-summary",),
 ]
+
+#
