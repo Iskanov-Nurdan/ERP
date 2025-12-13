@@ -2,7 +2,6 @@ from rest_framework.permissions import BasePermission
 
 
 class IsProductionStaff(BasePermission):
-
     def has_permission(self, request, view):
         user = request.user
         if not user or not user.is_authenticated:
@@ -15,4 +14,4 @@ class IsProductionStaff(BasePermission):
         if not role:
             return False
 
-        return role.name in ["production_worker", "production_operator"]
+        return getattr(role, "name", None) in ["production_worker", "production_operator"]

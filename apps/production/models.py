@@ -1,18 +1,18 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+
+from apps.production_control.models import ProductionLine
 
 
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         abstract = True
 
 
 class ProductionOrder(TimeStampedModel):
-
-
     class Stages(models.TextChoices):
         MIXING = "mixing", "Смешивание"
         EXTRUSION = "extrusion", "Экструзия"
@@ -37,14 +37,25 @@ class ProductionOrder(TimeStampedModel):
         NEW = "new", "Новый"
         IN_PROGRESS = "in_progress", "В работе"
         DONE = "done", "Завершён"
+        REJECTED = "rejected", "В браке"
         CANCELED = "canceled", "Отменён"
 
     client_name = models.CharField("Клиент", max_length=255)
     product_name = models.CharField("Продукт", max_length=255)
-    quantity = models.DecimalField(
-        "Количество",
-        max_digits=12,
-        decimal_places=3,
+    color = models.CharField("Цвет", max_length=64, blank=True, default="")
+
+    # план/факт в кг (как у тебя в ТЗ)
+    quantity_planned = models.DecimalField("План (кг)", max_digits=12, decimal_places=3)
+    produced_quantity = models.DecimalField("Произведено (кг)", max_digits=12, decimal_places=3, default=0)
+    defect_quantity = models.DecimalField("Брак (кг)", max_digits=12, decimal_places=3, default=0)
+
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+        verbose_name="Производственная линия",
     )
 
     current_stage = models.CharField(
@@ -68,6 +79,9 @@ class ProductionOrder(TimeStampedModel):
         default=Status.NEW,
     )
 
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -85,13 +99,9 @@ class ProductionOrder(TimeStampedModel):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.client_name} — {self.product_name} ({self.quantity})"
+        return f"{self.client_name} — {self.product_name} ({self.quantity_planned} кг)"
 
     def move_to_next_stage(self):
-        """
-        Переводит заказ на следующий этап по цепочке.
-        Если этап последний — помечаем статус как DONE.
-        """
         stages = [s.value for s in self.STAGE_FLOW]
         try:
             idx = stages.index(self.current_stage)
@@ -104,4 +114,6 @@ class ProductionOrder(TimeStampedModel):
             self.current_stage = stages[idx + 1]
             self.status = self.Status.IN_PROGRESS
         else:
+            self.current_stage = stages[-1]
             self.status = self.Status.DONE
+            self.completed_at = timezone.now()

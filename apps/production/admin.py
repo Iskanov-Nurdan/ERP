@@ -8,12 +8,16 @@ class ProductionOrderAdmin(admin.ModelAdmin):
         "id",
         "client_name",
         "product_name",
-        "quantity",
+        "color",
+        "quantity_planned",
+        "produced_quantity",
+        "defect_quantity",
+        "status",
         "current_stage",
         "priority",
-        "status",
-        "created_by",
+        "production_line",
         "created_at",
     )
-    list_filter = ("current_stage", "priority", "status")
-    search_fields = ("client_name", "product_name")
+    list_filter = ("status", "current_stage", "priority", "production_line")
+    search_fields = ("client_name", "product_name", "color")
+    ordering = ("-created_at",)
