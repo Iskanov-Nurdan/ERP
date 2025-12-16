@@ -42,8 +42,15 @@ class RawMaterialMovementListByMaterialView(generics.ListAPIView):
     permission_classes = [IsWarehouseStaff]
 
     def get_queryset(self):
-        material_id = self.kwargs["pk"]
-        return RawMaterialMovement.objects.filter(material_id=material_id)
+    # Swagger/Schema generation вызывает view без URL params
+        if getattr(self, "swagger_fake_view", False):
+            return self.queryset.none()  # или Model.objects.none()
+
+        material_id = self.kwargs.get("pk")
+        if not material_id:
+            return self.queryset.none()
+
+        return super().get_queryset().filter(material_id=material_id)
 
 
 class RawMaterialMonthlyReportView(APIView):

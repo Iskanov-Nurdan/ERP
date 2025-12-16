@@ -136,7 +136,10 @@ class ProductionOrderMoveNextView(APIView):
         if order.status in [ProductionOrder.Status.DONE, ProductionOrder.Status.REJECTED]:
             return Response({"detail": "Заказ уже закрыт."}, status=400)
 
+        old_status = order.status
         order.move_to_next_stage()
-        order.save(update_fields=["current_stage", "status", "completed_at", "updated_at"])
+        order.status = old_status  # stage двигаем, статус не трогаем
+        order.save(update_fields=["current_stage", "updated_at"])
+
 
         return Response(ProductionOrderSerializer(order).data, status=200)

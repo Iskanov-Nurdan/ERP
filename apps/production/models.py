@@ -45,7 +45,7 @@ class ProductionOrder(TimeStampedModel):
     color = models.CharField("Цвет", max_length=64, blank=True, default="")
 
     # план/факт в кг (как у тебя в ТЗ)
-    quantity_planned = models.DecimalField("План (кг)", max_digits=12, decimal_places=3)
+    quantity_planned = models.DecimalField("План (кг)", max_digits=12, decimal_places=3, default=0)
     produced_quantity = models.DecimalField("Произведено (кг)", max_digits=12, decimal_places=3, default=0)
     defect_quantity = models.DecimalField("Брак (кг)", max_digits=12, decimal_places=3, default=0)
 
@@ -115,5 +115,4 @@ class ProductionOrder(TimeStampedModel):
             self.status = self.Status.IN_PROGRESS
         else:
             self.current_stage = stages[-1]
-            self.status = self.Status.DONE
-            self.completed_at = timezone.now()
+            # статус и completed_at не трогаем — завершение только через /complete/

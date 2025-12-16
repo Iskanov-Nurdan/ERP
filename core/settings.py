@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.production_control",
     "apps.reports",
     "apps.dashboard",
+    "apps.warehouse",
 ]
 
 AUTH_USER_MODEL = "accounts.User"

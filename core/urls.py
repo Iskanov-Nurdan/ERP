@@ -48,6 +48,8 @@ urlpatterns = [
     path("api/production-control/", include("apps.production_control.urls")),
     path("api/reports/", include("apps.reports.urls")),
     path("api/dashboard/", include("apps.dashboard.urls")),
+    path("api/warehouse/", include("apps.warehouse.urls")),
+
 
     #Swagger / redoc
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='swagger'),
