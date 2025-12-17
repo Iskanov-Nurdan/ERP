@@ -58,6 +58,15 @@ class ProductionOrder(TimeStampedModel):
         verbose_name="Производственная линия",
     )
 
+    recipe_version = models.ForeignKey(
+        "recipes.RecipeVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="production_orders",
+        verbose_name="Рецептура (версия)",
+    )
+
     current_stage = models.CharField(
         "Текущий этап",
         max_length=32,
@@ -107,12 +116,44 @@ class ProductionOrder(TimeStampedModel):
             idx = stages.index(self.current_stage)
         except ValueError:
             self.current_stage = self.Stages.MIXING
-            self.status = self.Status.IN_PROGRESS
             return
 
         if idx < len(stages) - 1:
             self.current_stage = stages[idx + 1]
-            self.status = self.Status.IN_PROGRESS
         else:
             self.current_stage = stages[-1]
-            # статус и completed_at не трогаем — завершение только через /complete/
+
+
+
+class ProductionDowntime(models.Model):
+    """
+    Простой линии: причина + время.
+    Можно привязать к заказу (optional).
+    """
+    REASONS = [
+        ("no_material", "Нет сырья"),
+        ("breakdown", "Поломка"),
+        ("setup", "Переналадка"),
+        ("quality", "Проблема качества"),
+        ("other", "Другое"),
+    ]
+
+    production_line = models.ForeignKey(ProductionLine, on_delete=models.CASCADE, related_name="downtimes")
+    order = models.ForeignKey("production.ProductionOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="downtimes")
+
+    reason = models.CharField(max_length=32, choices=REASONS, default="other")
+    comment = models.TextField(blank=True)
+
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "Простой"
+        verbose_name_plural = "Простои"
+
+    @property
+    def is_active(self):
+        return self.ended_at is None

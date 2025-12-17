@@ -6,6 +6,8 @@ from .views import (
     ProductionOrderCompleteView,
     ProductionOrderRejectView,
     ProductionOrderMoveNextView,
+    DowntimeListCreateView,
+    DowntimeStopView,
 )
 
 urlpatterns = [
@@ -17,4 +19,8 @@ urlpatterns = [
     path("orders/<int:pk>/reject/", ProductionOrderRejectView.as_view(), name="production-order-reject"),
 
     path("orders/<int:pk>/move-next/", ProductionOrderMoveNextView.as_view(), name="production-order-move-next"),
+
+    path("downtimes/", DowntimeListCreateView.as_view(), name="downtime-list-create"),
+    path("downtimes/<int:pk>/stop/", DowntimeStopView.as_view(), name="downtime-stop"),
+
 ]

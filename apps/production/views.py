@@ -3,13 +3,10 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from .models import ProductionOrder
-from .serializers import (
-    ProductionOrderSerializer,
-    ProductionOrderCompleteSerializer,
-    ProductionOrderRejectSerializer,
-)
+from .models import *
+from .serializers import *
 from .permissions import IsProductionStaff
+from apps.recipes.services import auto_consume_raw_materials
 
 
 class ProductionOrderListCreateView(generics.ListCreateAPIView):
@@ -77,17 +74,38 @@ class ProductionOrderCompleteView(APIView):
         order.defect_quantity = defect
         order.status = ProductionOrder.Status.DONE
         order.completed_at = timezone.now()
+
         if notes:
             order.comment = (order.comment + "\n" + notes).strip()
 
         # обновляем линию (выпуск за смену)
         if order.production_line:
             line = order.production_line
-            # MVP: просто плюсуем по округлению (или делай свою логику)
             line.output_per_shift = int(line.output_per_shift + float(produced))
             line.save(update_fields=["output_per_shift", "updated_at"])
 
-        order.save(update_fields=["produced_quantity", "defect_quantity", "status", "completed_at", "comment", "updated_at"])
+        # ===== АВТОСПИСАНИЕ СЫРЬЯ ПО РЕЦЕПТУРЕ (если привязана) =====
+        if getattr(order, "recipe_version_id", None):
+            try:
+                total_weight = float(order.produced_quantity) + float(order.defect_quantity)
+                auto_consume_raw_materials(
+                    order=order,
+                    total_weight_kg=total_weight,
+                    user=request.user,
+                )
+            except Exception as e:
+                return Response({"detail": f"Ошибка автосписания сырья: {e}"}, status=400)
+
+        order.save(
+            update_fields=[
+                "produced_quantity",
+                "defect_quantity",
+                "status",
+                "completed_at",
+                "comment",
+                "updated_at",
+            ]
+        )
         return Response(ProductionOrderSerializer(order).data, status=200)
 
 
@@ -136,10 +154,43 @@ class ProductionOrderMoveNextView(APIView):
         if order.status in [ProductionOrder.Status.DONE, ProductionOrder.Status.REJECTED]:
             return Response({"detail": "Заказ уже закрыт."}, status=400)
 
-        old_status = order.status
         order.move_to_next_stage()
-        order.status = old_status  # stage двигаем, статус не трогаем
         order.save(update_fields=["current_stage", "updated_at"])
-
-
         return Response(ProductionOrderSerializer(order).data, status=200)
+
+
+
+
+class DowntimeListCreateView(generics.ListCreateAPIView):
+    queryset = ProductionDowntime.objects.all()
+    serializer_class = ProductionDowntimeSerializer
+    permission_classes = [IsProductionStaff]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        line_id = self.request.query_params.get("line_id")
+        active = self.request.query_params.get("active")
+
+        if line_id:
+            qs = qs.filter(production_line_id=line_id)
+        if active == "true":
+            qs = qs.filter(ended_at__isnull=True)
+
+        return qs
+
+
+class DowntimeStopView(APIView):
+    permission_classes = [IsProductionStaff]
+
+    def post(self, request, pk: int):
+        try:
+            dt = ProductionDowntime.objects.get(pk=pk)
+        except ProductionDowntime.DoesNotExist:
+            return Response({"detail": "Простой не найден."}, status=404)
+
+        if dt.ended_at:
+            return Response({"detail": "Простой уже закрыт."}, status=400)
+
+        dt.ended_at = timezone.now()
+        dt.save(update_fields=["ended_at"])
+        return Response(ProductionDowntimeSerializer(dt).data, status=200)

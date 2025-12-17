@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from django.db.models import Sum, F
+from django.db.models import Sum, Count, Q
 from django.utils.dateparse import parse_date
 
 from rest_framework.views import APIView
@@ -12,24 +12,15 @@ from .utils import get_model
 
 
 class RawMaterialReportView(APIView):
-
     permission_classes = [IsAuthenticated, IsAdminReports]
 
     def get(self, request):
         start_str = request.query_params.get("start")
         end_str = request.query_params.get("end")
 
-        if start_str:
-            start = parse_date(start_str)
-        else:
-            start = date.today() - timedelta(days=30)
+        start = parse_date(start_str) if start_str else (date.today() - timedelta(days=30))
+        end = parse_date(end_str) if end_str else date.today()
 
-        if end_str:
-            end = parse_date(end_str)
-        else:
-            end = date.today()
-
-        RawMaterial = get_model("sclad", "RawMaterial")
         Movement = get_model("sclad", "RawMaterialMovement")
 
         movements = Movement.objects.filter(
@@ -37,34 +28,23 @@ class RawMaterialReportView(APIView):
             created_at__date__lte=end,
         )
 
-        total_in = movements.filter(operation_type="in").aggregate(
-            total=Sum("quantity")
-        )["total"] or 0
+        total_in = movements.filter(operation_type="in").aggregate(total=Sum("quantity"))["total"] or 0
+        total_out = movements.filter(operation_type="out").aggregate(total=Sum("quantity"))["total"] or 0
 
-        total_out = movements.filter(operation_type="out").aggregate(
-            total=Sum("quantity")
-        )["total"] or 0
-
-        # по каждому материалу
         per_material = (
             movements
             .values("material_id", "material__name")
             .annotate(
-                qty_in=Sum(
-                    "quantity",
-                    filter=F("operation_type").__eq__("in")  # если выдаст ошибку — можно убрать filter
-                ),
-                qty_out=Sum(
-                    "quantity",
-                    filter=F("operation_type").__eq__("out")
-                ),
+                qty_in=Sum("quantity", filter=Q(operation_type="in")),
+                qty_out=Sum("quantity", filter=Q(operation_type="out")),
             )
+            .order_by("material__name")
         )
 
         materials_data = []
         for row in per_material:
-            qty_in = row.get("qty_in") or 0
-            qty_out = row.get("qty_out") or 0
+            qty_in = row["qty_in"] or 0
+            qty_out = row["qty_out"] or 0
             materials_data.append({
                 "id": row["material_id"],
                 "name": row["material__name"],
@@ -88,25 +68,18 @@ class ProductionPlanFactReportView(APIView):
         start_str = request.query_params.get("start")
         end_str = request.query_params.get("end")
 
-        if start_str:
-            start = parse_date(start_str)
-        else:
-            start = date.today() - timedelta(days=30)
-
-        if end_str:
-            end = parse_date(end_str)
-        else:
-            end = date.today()
+        start = parse_date(start_str) if start_str else (date.today() - timedelta(days=30))
+        end = parse_date(end_str) if end_str else date.today()
 
         ProductionOrder = get_model("production", "ProductionOrder")
 
         qs = ProductionOrder.objects.filter(
-            date__gte=start,
-            date__lte=end,
+            created_at__date__gte=start,
+            created_at__date__lte=end,
         )
 
         agg = qs.aggregate(
-            planned=Sum("planned_quantity"),
+            planned=Sum("quantity_planned"),
             produced=Sum("produced_quantity"),
         )
 
@@ -123,7 +96,7 @@ class ProductionPlanFactReportView(APIView):
 
 class QualityReportView(APIView):
     """
-    GET /api/reports/quality/?start=...&end=...
+    GET /api/reports/quality/?start=YYYY-MM-DD&end=YYYY-MM-DD
     """
     permission_classes = [IsAuthenticated, IsAdminReports]
 
@@ -131,15 +104,8 @@ class QualityReportView(APIView):
         start_str = request.query_params.get("start")
         end_str = request.query_params.get("end")
 
-        if start_str:
-            start = parse_date(start_str)
-        else:
-            start = date.today() - timedelta(days=30)
-
-        if end_str:
-            end = parse_date(end_str)
-        else:
-            end = date.today()
+        start = parse_date(start_str) if start_str else (date.today() - timedelta(days=30))
+        end = parse_date(end_str) if end_str else date.today()
 
         QualityIssue = get_model("quality", "QualityIssue")
 
@@ -150,12 +116,14 @@ class QualityReportView(APIView):
 
         by_severity = (
             qs.values("severity")
-            .annotate(total=Sum(1))
+            .annotate(total=Count("id"))
+            .order_by("severity")
         )
 
         by_product = (
             qs.values("product_name")
-            .annotate(total=Sum(1))
+            .annotate(total=Count("id"))
+            .order_by("-total")
         )
 
         return Response({

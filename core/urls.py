@@ -49,6 +49,7 @@ urlpatterns = [
     path("api/reports/", include("apps.reports.urls")),
     path("api/dashboard/", include("apps.dashboard.urls")),
     path("api/warehouse/", include("apps.warehouse.urls")),
+    path("api/recipes/", include("apps.recipes.urls")),
 
 
     #Swagger / redoc

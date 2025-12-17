@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.dashboard",
     "apps.warehouse",
+    "apps.recipes",
 ]
 
 AUTH_USER_MODEL = "accounts.User"

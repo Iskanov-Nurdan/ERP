@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ProductionOrder
+from .models import *
 
 
 class ProductionOrderSerializer(serializers.ModelSerializer):
@@ -85,3 +85,22 @@ class ProductionOrderRejectSerializer(serializers.Serializer):
         if value <= 0:
             raise serializers.ValidationError("Вес брака (кг) должен быть > 0.")
         return value
+
+
+class ProductionDowntimeSerializer(serializers.ModelSerializer):
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ProductionDowntime
+        fields = [
+            "id",
+            "production_line",
+            "order",
+            "reason",
+            "comment",
+            "started_at",
+            "ended_at",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = ["id", "is_active", "created_at"]
