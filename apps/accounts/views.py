@@ -2,9 +2,11 @@ from rest_framework import generics, permissions
 from django.contrib.auth import get_user_model
 from apps.accounts.permissions import IsOwnerOrAdmin
 from apps.accounts.models import User, Role
-from apps.accounts.serializers import UserSerializer, RegisterSerializer, RoleSerializer, LoginSerializer
+from apps.accounts.serializers import UserSerializer, RegisterSerializer, RoleSerializer, LoginSerializer, UserUpdateSerializer
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.contrib.auth import login
+from rest_framework import status
 
 User = get_user_model()
 
@@ -54,6 +56,11 @@ class UserDetailView(generics.RetrieveAPIView):
 class UserDeleteView(generics.DestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = [IsOwnerOrAdmin]
+
+class UserUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserUpdateSerializer
     permission_classes = [IsOwnerOrAdmin]
 
 class MeView(generics.RetrieveAPIView):

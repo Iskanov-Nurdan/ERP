@@ -1,93 +1,147 @@
-from django.utils import timezone
-from django.db.models import Sum
-from rest_framework import generics
-from rest_framework.views import APIView
+from django.db.models import Sum, Q
+from django.db.models.functions import Coalesce
+from decimal import Decimal
+from django.db import transaction
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import RawMaterial, RawMaterialMovement, FinishedProduct
+
+from .models import (
+    RawMaterial,
+    RawMaterialReceipt,
+    RawMaterialMovement,
+    Recipe,
+)
 from .serializers import (
     RawMaterialSerializer,
-    RawMaterialMovementSerializer,
-    FinishedProductSerializer,
+    RawMaterialReceiptSerializer,
+    RawMaterialBatchesBalanceSerializer,
+    RecipeSerializer,
+    RecipeWriteSerializer,   # ✅ ВОТ ЭТО ДОБАВЬ
 )
-from .permissions import IsWarehouseStaff
-
+from .permissions import IsOwnerOrAdmin
 
 
 class RawMaterialListCreateView(generics.ListCreateAPIView):
     queryset = RawMaterial.objects.all()
     serializer_class = RawMaterialSerializer
-    permission_classes = [IsWarehouseStaff]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
 
 class RawMaterialDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = RawMaterial.objects.all()
     serializer_class = RawMaterialSerializer
-    permission_classes = [IsWarehouseStaff]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        material = self.get_object()
+
+        if material.receipts.exists():
+            return Response(
+                {"detail": "Сырьё с приходами удалить нельзя"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if material.recipe_items.exists():
+            return Response(
+                {"detail": "Сырьё используется в рецептах"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().destroy(request, *args, **kwargs)
 
 
-class RawMaterialMovementListCreateView(generics.ListCreateAPIView):
+class RawMaterialReceiptListCreateView(generics.ListCreateAPIView):
+    queryset = RawMaterialReceipt.objects.select_related("material")
+    serializer_class = RawMaterialReceiptSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
-    queryset = RawMaterialMovement.objects.select_related("material", "performed_by")
-    serializer_class = RawMaterialMovementSerializer
-    permission_classes = [IsWarehouseStaff]
-
+    @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save(performed_by=self.request.user)
-
-
-class RawMaterialMovementListByMaterialView(generics.ListAPIView):
-
-    serializer_class = RawMaterialMovementSerializer
-    permission_classes = [IsWarehouseStaff]
-
-    def get_queryset(self):
-    # Swagger/Schema generation вызывает view без URL params
-        if getattr(self, "swagger_fake_view", False):
-            return self.queryset.none()  # или Model.objects.none()
-
-        material_id = self.kwargs.get("pk")
-        if not material_id:
-            return self.queryset.none()
-
-        return super().get_queryset().filter(material_id=material_id)
-
-
-class RawMaterialMonthlyReportView(APIView):
- 
-    permission_classes = [IsWarehouseStaff]
-
-    def get(self, request):
-        now = timezone.now()
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-        qs = RawMaterialMovement.objects.filter(created_at__gte=start)
-
-        incoming = qs.filter(operation_type="in").aggregate(
-            total=Sum("quantity")
-        )["total"] or 0
-
-        outgoing = qs.filter(operation_type="out").aggregate(
-            total=Sum("quantity")
-        )["total"] or 0
-
-        return Response(
-            {
-                "period": start.strftime("%Y-%m"),
-                "total_incoming": str(incoming),
-                "total_outgoing": str(outgoing),
-            }
+        receipt = serializer.save()
+        RawMaterialMovement.objects.create(
+            material=receipt.material,
+            operation_type=RawMaterialMovement.Operation.IN_,
+            quantity=receipt.quantity,
+            receipt=receipt,
         )
 
 
+class RawMaterialBatchesBalancesView(APIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
-class FinishedProductListCreateView(generics.ListCreateAPIView):
-    queryset = FinishedProduct.objects.all()
-    serializer_class = FinishedProductSerializer
-    permission_classes = [IsWarehouseStaff]
+    def get(self, request):
+        receipts = (
+            RawMaterialReceipt.objects.select_related("material")
+            .annotate(
+                out_qty=Coalesce(
+                    Sum(
+                        "movements__quantity",
+                        filter=Q(movements__operation_type=RawMaterialMovement.Operation.OUT),
+                    ),
+                    Decimal("0"),
+                )
+            )
+            .order_by("material__id", "date", "id")
+        )
+
+        grouped = {}
+
+        for r in receipts:
+            mid = r.material_id
+            if mid not in grouped:
+                grouped[mid] = {
+                    "material_id": mid,
+                    "material_name": r.material.name,
+                    "unit_label": r.material.get_unit_display(),
+                    "total": Decimal("0"),
+                    "batches": [],
+                }
+
+            # баланс партии = приход - списание по этой партии
+            qty = (r.quantity or Decimal("0")) - (r.out_qty or Decimal("0"))
+
+            # если партия “ушла в ноль” — можно скрывать (по желанию)
+            # if qty <= 0:
+            #     continue
+
+            batch_number = (r.batch_number or "").strip() or f"REC-{r.id}"
+
+            grouped[mid]["batches"].append(
+                {
+                    "batch_number": batch_number,
+                    "qty": qty,
+                    "date": r.date,
+                    "supplier": r.supplier or "",
+                }
+            )
+            grouped[mid]["total"] += qty
+
+        data = list(grouped.values())
+
+        serializer = RawMaterialBatchesBalanceSerializer(data=data, many=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)# =======================
+# РЕЦЕПТЫ
+# =======================
+
+class RecipeListCreateView(generics.ListCreateAPIView):
+    queryset = Recipe.objects.prefetch_related("items__material")
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return RecipeWriteSerializer
+        return RecipeSerializer
 
 
-class FinishedProductDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = FinishedProduct.objects.all()
-    serializer_class = FinishedProductSerializer
-    permission_classes = [IsWarehouseStaff]
+class RecipeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Recipe.objects.prefetch_related("items__material")
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return RecipeWriteSerializer
+        return RecipeSerializer

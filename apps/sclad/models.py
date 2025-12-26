@@ -1,151 +1,154 @@
 from django.db import models
-from django.conf import settings
+from django.core.validators import MinValueValidator
 
 
-class TimeStampedModel(models.Model):
+# =======================
+# СЫРЬЁ
+# =======================
+class RawMaterial(models.Model):
+    class Unit(models.TextChoices):
+        G = "g", "г"
+        KG = "kg", "кг"
+        ML = "ml", "мл"
+        L = "l", "л"
+
+    name = models.CharField("Название", max_length=255, unique=True)
+    unit = models.CharField(
+        "Единица измерения",
+        max_length=5,
+        choices=Unit.choices,
+        default=Unit.KG,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        abstract = True
-
-
-class RawMaterial(TimeStampedModel):
-    class MaterialTypes(models.TextChoices):
-        GRANULES = "granules", "Гранулы"
-        COLOR = "color", "Краситель"
-        ADDITIVE = "additive", "Добавка"
-        PACKAGE = "package", "Упаковка"
-        OTHER = "other", "Другое"
-
-    class Units(models.TextChoices):
-        KG = "kg", "кг"
-        TON = "t", "т"
-        LITER = "l", "л"
-        PCS = "pcs", "шт"
-
-    name = models.CharField("Наименование", max_length=255)
-    material_type = models.CharField(
-        "Тип сырья",
-        max_length=20,
-        choices=MaterialTypes.choices,
-    )
-    unit = models.CharField(
-        "Ед. измерения",
-        max_length=10,
-        choices=Units.choices,
-        default=Units.KG,
-    )
-    min_stock = models.DecimalField(
-        "Минимальный остаток",
-        max_digits=12,
-        decimal_places=3,
-        default=0,
-    )
-    current_stock = models.DecimalField(
-        "Текущий остаток",
-        max_digits=12,
-        decimal_places=3,
-        default=0,
-    )
-
-    class Meta:
         verbose_name = "Сырьё"
-        verbose_name_plural = "Сырьё"
-        ordering = ["name"]
+        verbose_name_plural = "Справочник сырья"
+        ordering = ["id"]
 
     def __str__(self):
-        return self.name
-
-    @property
-    def status(self):
-
-        if self.current_stock <= 0:
-            return "empty"
-        if self.current_stock < self.min_stock:
-            return "low"
-        return "ok"
+        return f"{self.name} ({self.get_unit_display()})"
 
 
-class RawMaterialMovement(TimeStampedModel):
-  
-    class OperationTypes(models.TextChoices):
-        IN = "in", "Поступление"
+# =======================
+# ПРИХОД СЫРЬЯ
+# =======================
+class RawMaterialReceipt(models.Model):
+    material = models.ForeignKey(
+        RawMaterial,
+        on_delete=models.PROTECT,
+        related_name="receipts",
+        verbose_name="Сырьё",
+    )
+    date = models.DateField("Дата прихода")
+    quantity = models.DecimalField(
+        "Количество",
+        max_digits=14,
+        decimal_places=3,
+        validators=[MinValueValidator(0.001)],
+    )
+
+    batch_number = models.CharField("Номер партии", max_length=120, blank=True, default="")
+    supplier = models.CharField("Поставщик", max_length=255, blank=True, default="")
+    comment = models.CharField("Комментарий", max_length=500, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Приход сырья"
+        verbose_name_plural = "Приход сырья"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return f"{self.material.name} +{self.quantity} {self.material.unit}"
+
+
+# =======================
+# ДВИЖЕНИЕ СЫРЬЯ
+# =======================
+class RawMaterialMovement(models.Model):
+    class Operation(models.TextChoices):
+        IN_ = "in", "Приход"
         OUT = "out", "Расход"
 
     material = models.ForeignKey(
         RawMaterial,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="movements",
+        verbose_name="Сырьё",
     )
-    operation_type = models.CharField(
-        "Тип операции",
-        max_length=3,
-        choices=OperationTypes.choices,
-    )
-    quantity = models.DecimalField(
-        "Количество",
-        max_digits=12,
-        decimal_places=3,
-    )
-    document = models.CharField(
-        "Документ (накладная, заказ и т.п.)",
-        max_length=255,
-        blank=True,
-    )
-    performed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+    operation_type = models.CharField("Тип операции", max_length=10, choices=Operation.choices)
+    quantity = models.DecimalField("Количество", max_digits=14, decimal_places=3)
+
+    receipt = models.ForeignKey(
+        RawMaterialReceipt,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="raw_material_operations",
+        related_name="movements",
+        verbose_name="Документ прихода",
     )
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Движение сырья"
         verbose_name_plural = "Движения сырья"
-        ordering = ["-created_at"]
+        ordering = ["-created_at", "-id"]
 
     def __str__(self):
-        return f"{self.material} {self.operation_type} {self.quantity}"
+        sign = "+" if self.operation_type == self.Operation.IN_ else "-"
+        return f"{self.material.name} {sign}{self.quantity}"
 
 
-    def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
+# =======================
+# РЕЦЕПТ
+# =======================
+class Recipe(models.Model):
+    # code = models.CharField("Код рецепта", max_length=50, unique=True)
+    name = models.CharField("Название рецепта", max_length=255)
+    product_name = models.CharField("Товар", max_length=255)
 
-        if is_new:
-            from django.db.models import F
-            sign = 1 if self.operation_type == self.OperationTypes.IN else -1
-            RawMaterial.objects.filter(pk=self.material_id).update(
-                current_stock=F("current_stock") + sign * self.quantity
-            )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Рецепт"
+        verbose_name_plural = "Рецепты"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.name}"
 
 
-class FinishedProduct(TimeStampedModel):
-    name = models.CharField("Наименование", max_length=255)
-    sku = models.CharField("Артикул (SKU)", max_length=64, unique=True)
-    stock = models.DecimalField(
-        "Остаток на складе",
-        max_digits=12,
-        decimal_places=3,
-        default=0,
+# =======================
+# СЫРЬЁ В РЕЦЕПТЕ
+# =======================
+class RecipeItem(models.Model):
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Рецепт",
     )
-    reserved = models.DecimalField(
-        "Резерв (под подтверждённые заказы)",
-        max_digits=12,
+    material = models.ForeignKey(
+        RawMaterial,
+        on_delete=models.PROTECT,
+        related_name="recipe_items",
+        verbose_name="Сырьё",
+    )
+    quantity = models.DecimalField(
+        "Количество",
+        max_digits=14,
         decimal_places=3,
-        default=0,
+        validators=[MinValueValidator(0.001)],
     )
 
     class Meta:
-        verbose_name = "Готовая продукция"
-        verbose_name_plural = "Готовая продукция"
-        ordering = ["name"]
+        verbose_name = "Сырьё в рецепте"
+        verbose_name_plural = "Сырьё в рецептах"
+        unique_together = ("recipe", "material")
 
     def __str__(self):
-        return f"{self.name} ({self.sku})"
-
-    @property
-    def available(self):
-        return self.stock - self.reserved
+        return f"{self.material.name} — {self.quantity}"

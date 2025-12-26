@@ -44,15 +44,8 @@ INSTALLED_APPS = [
     # local apps
     "apps.accounts",
     "apps.sclad",
-    "apps.production",
-    "apps.sales",
-    "apps.logistics",
-    "apps.quality",
     "apps.production_control",
-    "apps.reports",
-    "apps.dashboard",
-    "apps.warehouse",
-    "apps.recipes",
+
 ]
 
 AUTH_USER_MODEL = "accounts.User"

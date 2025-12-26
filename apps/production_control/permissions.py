@@ -11,7 +11,4 @@ class IsProductionControlUser(BasePermission):
             return True
 
         role = getattr(user, "role", None)
-        if role and getattr(role, "name", None) in ["production_operator", "production_worker"]:
-            return True
-
-        return False
+        return bool(role and getattr(role, "name", None) in ["production_operator", "production_worker"])

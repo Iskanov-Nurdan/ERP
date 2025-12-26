@@ -27,8 +27,8 @@ schema_view = get_schema_view(
         default_version='v1',
         description="Описание API",
     ),
-    public=True,   
-    permission_classes=(permissions.AllowAny,),  
+    public=True,
+    permission_classes=(permissions.AllowAny,),
 )
 
 
@@ -41,15 +41,8 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="jwt_refresh"),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/sclad/", include("apps.sclad.urls")),
-    path("api/production/", include("apps.production.urls")),
-    path("api/sales/", include("apps.sales.urls")),
-    path("api/logistics/", include("apps.logistics.urls")),
-    path("api/quality/", include("apps.quality.urls")),
     path("api/production-control/", include("apps.production_control.urls")),
-    path("api/reports/", include("apps.reports.urls")),
-    path("api/dashboard/", include("apps.dashboard.urls")),
-    path("api/warehouse/", include("apps.warehouse.urls")),
-    path("api/recipes/", include("apps.recipes.urls")),
+
 
 
     #Swagger / redoc
@@ -59,4 +52,3 @@ urlpatterns = [
 ]
 
 
- 

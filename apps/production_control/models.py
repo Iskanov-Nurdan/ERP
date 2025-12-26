@@ -1,52 +1,8 @@
 from django.db import models
-from django.conf import settings
 
 
 class ProductionLine(models.Model):
-    class Status(models.TextChoices):
-        RUNNING = "running", "Работает"
-        STOPPED = "stopped", "Остановлена"
-        MAINTENANCE = "maintenance", "Обслуживание"
-        IDLE = "idle", "Простой"
-
-    identifier = models.CharField(
-        max_length=50,
-        unique=True,
-        verbose_name="Идентификатор линии",
-        help_text="Код/номер линии, например L1, L2, EXT-01",
-    )
-    name = models.CharField(max_length=255, verbose_name="Название")
-
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.IDLE,
-        verbose_name="Статус",
-    )
-
-    speed_percent = models.PositiveIntegerField(
-        verbose_name="Скорость, %",
-        default=0,
-        help_text="0–100",
-    )
-
-    output_per_shift = models.PositiveIntegerField(
-        verbose_name="Выпуск за смену (условно)",
-        default=0,
-    )
-
-    last_maintenance_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="Последнее обслуживание"
-    )
-
-    monitored_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="production_lines",
-        verbose_name="Ответственный оператор",
-    )
+    name = models.CharField(max_length=255, verbose_name="Название линии", unique=True)
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Обновлено")
@@ -54,7 +10,7 @@ class ProductionLine(models.Model):
     class Meta:
         verbose_name = "Производственная линия"
         verbose_name_plural = "Производственные линии"
-        ordering = ["identifier"]
+        ordering = ["name"]
 
     def __str__(self):
-        return f"{self.identifier} — {self.name} ({self.get_status_display()})"
+        return self.name

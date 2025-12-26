@@ -1,19 +1,7 @@
 from rest_framework.permissions import BasePermission
 
 
-class IsWarehouseStaff(BasePermission):
-
-
+class IsOwnerOrAdmin(BasePermission):
     def has_permission(self, request, view):
-        user = request.user
-        if not user or not user.is_authenticated:
-            return False
-
-        if getattr(user, "system_role", None) in ["owner", "admin"]:
-            return True
-
-        role = getattr(user, "role", None)
-        if not role:
-            return False
-
-        return role.name in ["warehouse_manager"]
+        u = request.user
+        return bool(u and u.is_authenticated and getattr(u, "system_role", None) in ["owner", "admin"])
