@@ -7,19 +7,23 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-
+from apps.production.serializers import ProductionBatchDetailSerializer
 from .models import (
     RawMaterial,
     RawMaterialReceipt,
     RawMaterialMovement,
     Recipe,
+    FinishedProductBatch,
+    FinishedProductMovement
 )
 from .serializers import (
     RawMaterialSerializer,
     RawMaterialReceiptSerializer,
     RawMaterialBatchesBalanceSerializer,
     RecipeSerializer,
-    RecipeWriteSerializer,   # ✅ ВОТ ЭТО ДОБАВЬ
+    RecipeWriteSerializer,
+    FinishedProductBatchSerializer,
+    FinishedProductBatchCreateSerializer,
 )
 from .permissions import IsOwnerOrAdmin
 
@@ -69,6 +73,7 @@ class RawMaterialReceiptListCreateView(generics.ListCreateAPIView):
         )
 
 
+# apps/sclad/views.py - в классе RawMaterialBatchesBalancesView
 class RawMaterialBatchesBalancesView(APIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
@@ -100,12 +105,7 @@ class RawMaterialBatchesBalancesView(APIView):
                     "batches": [],
                 }
 
-            # баланс партии = приход - списание по этой партии
             qty = (r.quantity or Decimal("0")) - (r.out_qty or Decimal("0"))
-
-            # если партия “ушла в ноль” — можно скрывать (по желанию)
-            # if qty <= 0:
-            #     continue
 
             batch_number = (r.batch_number or "").strip() or f"REC-{r.id}"
 
@@ -115,17 +115,23 @@ class RawMaterialBatchesBalancesView(APIView):
                     "qty": qty,
                     "date": r.date,
                     "supplier": r.supplier or "",
+                    "receipt_id": r.id,  # ✅ ДОБАВЛЕНО
+                    "unit_label": r.material.get_unit_display(),  # ✅ тоже полезно
                 }
             )
             grouped[mid]["total"] += qty
 
         data = list(grouped.values())
 
+        # Конвертируем Decimal в float для фронтенда
+        for item in data:
+            item["total"] = float(item["total"])
+            for batch in item["batches"]:
+                batch["qty"] = float(batch["qty"])
+
         serializer = RawMaterialBatchesBalanceSerializer(data=data, many=True)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)# =======================
-# РЕЦЕПТЫ
-# =======================
+        return Response(serializer.data)
 
 class RecipeListCreateView(generics.ListCreateAPIView):
     queryset = Recipe.objects.prefetch_related("items__material")
@@ -145,3 +151,50 @@ class RecipeDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ("PUT", "PATCH"):
             return RecipeWriteSerializer
         return RecipeSerializer
+
+
+
+
+
+class ProductionBatchesForAcceptanceView(generics.ListAPIView):
+    """Партии, принятые ОТК и готовые к приёмке на склад ГП"""
+    serializer_class = ProductionBatchDetailSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def get_queryset(self):
+        return ProductionBatch.objects.filter(
+            quality_status__in=['passed', 'passed_with_defects'],
+            finished_batches__isnull=True  # Ещё не приняты на склад
+        ).select_related('operator', 'quality_inspector', 'order')
+
+
+class FinishedProductBatchCreateView(generics.CreateAPIView):
+    """Приёмка партии на склад ГП"""
+    queryset = FinishedProductBatch.objects.all()
+    serializer_class = FinishedProductBatchCreateSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+
+class FinishedProductBatchListView(generics.ListAPIView):
+    """Список партий ГП на складе"""
+    queryset = FinishedProductBatch.objects.select_related(
+        'production_batch', 'accepted_by'
+    ).order_by('-acceptance_date')
+    serializer_class = FinishedProductBatchSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+
+class FinishedProductBalanceView(APIView):
+    """Остатки ГП по продуктам"""
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def get(self, request):
+        # Группируем по продуктам
+        from django.db.models import Sum
+        balances = FinishedProductBatch.objects.filter(
+            status='available'
+        ).values('product_name').annotate(
+            total=Sum('quantity')
+        ).order_by('product_name')
+
+        return Response(balances)

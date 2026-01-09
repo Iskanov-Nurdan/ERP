@@ -45,7 +45,9 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.sclad",
     "apps.production_control",
-
+    "apps.shifts",
+    "apps.order",
+    "apps.production",
 ]
 
 AUTH_USER_MODEL = "accounts.User"

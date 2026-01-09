@@ -42,6 +42,11 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),
     path("api/sclad/", include("apps.sclad.urls")),
     path("api/production-control/", include("apps.production_control.urls")),
+    path("api/shifts/", include("apps.shifts.urls")),
+    path("api/order/", include("apps.order.urls")),
+    path("api/production/", include("apps.production.urls")),
+
+
 
 
 
